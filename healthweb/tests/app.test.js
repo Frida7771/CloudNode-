@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../app');
+const app = require('../app/app');
 
 describe('HealthWeb Clone API', () => {
   describe('GET /', () => {

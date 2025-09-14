@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../app/utils/database");
+const sequelize = require("../utils/database");
 
 const EmailLog = sequelize.define("EmailLog", {
   id: {

@@ -3,7 +3,7 @@ const multer = require("multer");
 const AWS = require("aws-sdk");
 const router = express.Router();
 const Image = require("../models/image");
-const logger = require("../../app/utils/logger");
+const logger = require("../utils/logger");
 
 // Configure AWS S3
 const s3 = new AWS.S3({

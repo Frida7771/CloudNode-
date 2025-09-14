@@ -3,11 +3,11 @@ const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
 const { Sequelize } = require("sequelize");
-const userRoutes = require("./app/routes/user");
-const imageRoutes = require("./app/routes/image");
+const userRoutes = require("./routes/user");
+const imageRoutes = require("./routes/image");
 const AWS = require("aws-sdk");
-const metrics = require("./app/middleware/metrics");
-const logger = require("./app/utils/logger");
+const metrics = require("./middleware/metrics");
+const logger = require("./utils/logger");
 
 // AWS Configuration
 AWS.config.update({
