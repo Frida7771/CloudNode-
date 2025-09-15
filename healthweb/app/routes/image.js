@@ -1,194 +1,218 @@
 const express = require("express");
+const ImageModel = require("../models/image");
+const UserModel = require("../models/user");
+const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const AWS = require("aws-sdk");
-const router = express.Router();
-const Image = require("../models/image");
-const logger = require("../utils/logger");
+const s3 = new AWS.S3();
+const { v4: uuidv4 } = require("uuid"); // For unique image names
+const logger = require('../utils/logger');
 
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION
-});
-
-// Configure multer for memory storage
+// Configure multer for handling file uploads
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 5 * 1024 * 1024, // 5MB limit
   },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'));
-    }
-  }
 });
 
-// Upload image
-router.post("/upload", upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        error: "No file uploaded",
-        message: "Please select an image file to upload"
-      });
+module.exports = (sequelize) => {
+  const router = express.Router();
+  const Image = ImageModel(sequelize);
+  const User = UserModel(sequelize);
+
+  // Middleware to authenticate user
+  async function authenticateUser(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { userId, description, tags } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({
-        error: "Missing user ID",
-        message: "User ID is required"
-      });
-    }
+    const [username, password] = Buffer.from(authHeader.split(" ")[1], "base64")
+      .toString()
+      .split(":");
 
-    // Generate unique filename
-    const timestamp = Date.now();
-    const fileExtension = req.file.originalname.split('.').pop();
-    const filename = `images/${userId}/${timestamp}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
-
-    // Upload to S3
-    const uploadParams = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: filename,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-      ACL: 'public-read'
-    };
-
-    const uploadResult = await s3.upload(uploadParams).promise();
-
-    // Save to database
-    const image = await Image.create({
-      filename: filename,
-      originalName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      s3Key: filename,
-      s3Url: uploadResult.Location,
-      userId: parseInt(userId),
-      description: description || null,
-      tags: tags ? JSON.parse(tags) : []
-    });
-
-    logger.info(`Image uploaded: ${image.s3Url}`);
-
-    res.status(201).json({
-      message: "Image uploaded successfully",
-      image: {
-        id: image.id,
-        filename: image.filename,
-        originalName: image.originalName,
-        s3Url: image.s3Url,
-        size: image.size,
-        description: image.description,
-        tags: image.tags,
-        createdAt: image.createdAt
-      }
-    });
-
-  } catch (error) {
-    logger.error("Image upload error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to upload image"
-    });
-  }
-});
-
-// Get all images
-router.get("/", async (req, res) => {
-  try {
-    const { userId, limit = 20, offset = 0 } = req.query;
-    
-    const whereClause = userId ? { userId: parseInt(userId) } : {};
-    
-    const images = await Image.findAll({
-      where: whereClause,
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
-    });
-
-    res.json({ images });
-
-  } catch (error) {
-    logger.error("Get images error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to get images"
-    });
-  }
-});
-
-// Get image by ID
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const image = await Image.findByPk(id);
-
-    if (!image) {
-      return res.status(404).json({
-        error: "Image not found",
-        message: "Image with this ID does not exist"
-      });
-    }
-
-    res.json({ image });
-
-  } catch (error) {
-    logger.error("Get image error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to get image"
-    });
-  }
-});
-
-// Delete image
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const image = await Image.findByPk(id);
-
-    if (!image) {
-      return res.status(404).json({
-        error: "Image not found",
-        message: "Image with this ID does not exist"
-      });
-    }
-
-    // Delete from S3
     try {
-      await s3.deleteObject({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: image.s3Key
-      }).promise();
-    } catch (s3Error) {
-      logger.error("Failed to delete from S3:", s3Error);
+      const user = await User.findOne({ where: { email: username } });
+
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (!user || !user.verified) {
+        return res.status(403).json({ message: 'Access denied. Verify your email first.' });
+      }
+
+      req.userId = user.id;
+      next();
+    } catch (error) {
+      console.error("Authentication error:", error);
+      res.status(503).send("Service Unavailable");
     }
-
-    // Delete from database
-    await image.destroy();
-
-    logger.info(`Image deleted: ${image.s3Url}`);
-
-    res.json({
-      message: "Image deleted successfully"
-    });
-
-  } catch (error) {
-    logger.error("Delete image error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to delete image"
-    });
   }
-});
 
-module.exports = router;
+  router.head("/v1/user/self/pic", async (req, res) => {
+    return res
+      .status(405)
+      .set("Cache-Control", "no-cache", "no-store", "must-revalidate")
+      .send();
+  });
+
+  // Add or Update user Image
+  router.post(
+    "/v1/user/self/pic",
+    authenticateUser,
+    upload.single("file_name"),
+    async (req, res) => {
+      try {
+        // logger.info('Starting image upload process', { userId: req.userId });
+        const userId = req.userId;
+
+        if (Object.keys(req.body).length > 0) {
+          return res.status(400).json();
+        }
+
+        if (!req.file) {
+          return res
+            .status(400)
+            .json({ message: "Bad Request: No file uploaded" });
+        }
+
+        // Check if the user already has a profile image
+      const existingProfile = await Image.findOne({ where: { user_id: userId } });
+
+      if (existingProfile) {
+        return res
+        .status(400)
+        .json();
+      }
+
+        // Upload new image
+        const fileContent = req.file.buffer;
+        const file_name = `${userId}/${uuidv4()}_${req.file.originalname}`;
+
+        const uploadParams = {
+          Bucket: process.env.S3_BUCKET_NAME,
+          Key: file_name,
+          Body: fileContent,
+          ContentType: req.file.mimetype,
+        };
+
+        const s3Data = await s3.upload(uploadParams).promise();
+        const url = s3Data.Location;
+
+        const profile = await Image.create({
+          file_name: file_name,
+          url: url,
+          upload_date: new Date(),
+          user_id: userId,
+        });
+
+        logger.info(`Profile pic added/updated for user: ${userId}`);
+        return res.status(201).json({
+          message: "Profile pic added/updated",
+          profile: {
+            file_name: profile.file_name,
+            id: profile.id,
+            url: profile.url,
+            upload_date: profile.upload_date,
+            user_id: userId
+          },
+        });
+      } catch (error) {
+        logger.error('Error in image upload process', {
+          error: error.message,
+          stack: error.stack,
+          userId: req.userId
+        });
+        console.error("Error in image upload process:", error);
+        return res
+          .status(503)
+          .set("Cache-Control", "no-cache, no-store, must-revalidate")
+          .json({ message: "Service temporarily unavailable" });
+      }
+    }
+  );
+
+  // Get user Image
+  router.get("/v1/user/self/pic", authenticateUser, async (req, res) => {
+    try {
+      
+      const userId = req.userId;
+      logger.info(`Received request for profile image from user: ${userId}`);
+      // Check for additional fields in form-data
+      if (Object.keys(req.body).length > 0) {
+        return res.status(400).json();
+      }
+
+      const profile = await Image.findOne({ where: { user_id: userId } });
+
+      if (!profile) {
+        logger.warn("Profile image not found for user: " + userId);
+        return res.status(404).json({ message: "Profile image not found" });
+      }
+
+      res.status(200).json({
+        id: profile.id,
+        fileName: profile.file_name,
+        url: profile.url,
+        upload_date: profile.upload_date,
+        user_id: profile.user_id,
+      });
+    } catch (error) {
+      logger.error("Error retrieving profile image: " + error.message);
+      console.error("Error retrieving profile image:", error);
+      res
+        .status(503)
+        .set("Cache-Control", "no-cache, no-store, must-revalidate")
+        .send();
+    }
+  });
+
+  // Delete Profile Image
+  router.delete("/v1/user/self/pic", authenticateUser, async (req, res) => {
+    try {
+      const userId = req.userId;
+
+      // Check for additional fields in form-data
+      if (Object.keys(req.body).length > 0) {
+        return res.status(400).json();
+      }
+
+      const profile = await Image.findOne({ where: { user_id: userId } });
+      if (!profile) {
+        return res.status(404).json();
+      }
+
+      // Remove image from S3
+      const params = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: profile.file_name,
+      };
+
+      await s3.deleteObject(params).promise();
+
+      // Remove image record from database
+      await Image.destroy({ where: { user_id: userId } });
+
+      res.status(204).json();
+    } catch (error) {
+      console.error("Error deleting profile image:", error);
+      res
+        .status(503)
+        .set("Cache-Control", "no-cache, no-store, must-revalidate")
+        .send();
+    }
+  });
+
+  // return 405 for all other methods
+  router.all("/v1/user/self/pic", async (req, res) => {
+    return res
+      .status(405)
+      .set("Cache-Control", "no-cache", "no-store", "must-revalidate")
+      .send();
+  });
+
+  return router;
+};

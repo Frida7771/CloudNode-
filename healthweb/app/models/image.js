@@ -1,56 +1,36 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../utils/database");
 
-const Image = sequelize.define("Image", {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  filename: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  originalName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  mimeType: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  size: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  s3Key: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  s3Url: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  tags: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    defaultValue: [],
-  },
-}, {
-  tableName: "images",
-  timestamps: true,
-});
+module.exports = (sequelize) => {
+  const Image = sequelize.define("Image", {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    file_name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    url: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    upload_date: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+  }, {
+    tableName: "images",
+    timestamps: false, // CloudNode uses upload_date instead of timestamps
+  });
 
-module.exports = Image;
+  return Image;
+};

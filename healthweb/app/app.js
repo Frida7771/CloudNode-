@@ -6,7 +6,7 @@ const { Sequelize } = require("sequelize");
 const userRoutes = require("./routes/user");
 const imageRoutes = require("./routes/image");
 const AWS = require("aws-sdk");
-const metrics = require("./middleware/metrics");
+const { metrics } = require("./middleware/metrics");
 const logger = require("./utils/logger");
 
 // AWS Configuration
@@ -73,8 +73,8 @@ app.get("/health", (req, res) => {
 });
 
 // API Routes
-app.use("/api/users", userRoutes);
-app.use("/api/images", imageRoutes);
+app.use("/api/users", userRoutes(sequelize));
+app.use("/api/images", imageRoutes(sequelize));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
