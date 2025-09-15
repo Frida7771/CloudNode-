@@ -1,0 +1,17 @@
+{
+  "name": "healthweb-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function for email verification using SendGrid",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-sns": "^3.0.0",
+    "@sendgrid/mail": "^8.1.4",
+    "aws-sdk": "^2.1691.0",
+    "winston": "^3.15.0"
+  }
+}
