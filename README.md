@@ -2,7 +2,7 @@
 
 ## Introduction
 
-**HealthWeb** is a cloud-based web application deployed on AWS, using Terraform to manage the infrastructure as code. The application is developed in **Node.js** and is designed to demonstrate a full-stack cloud architecture with database integration, user management, and monitoring capabilities.
+**HealthWeb** is a cloud-based web application deployed on AWS, using Terraform to manage the infrastructure as code.
 
 ## Key Features
 
