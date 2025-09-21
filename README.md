@@ -34,7 +34,7 @@
 - AWS EC2, S3, RDS, CloudWatch, Lambda, KMS
 - Terraform (for infrastructure provisioning)
 
-## Screenshot
+## Cloud Architecture
 ![Cloud Screenshot](Screenshots/cloudNode.png)
 
 
